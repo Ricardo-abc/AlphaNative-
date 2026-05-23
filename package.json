@@ -1,0 +1,30 @@
+{
+  "name": "alphanative",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "apk": "node apk/compress.js",
+    "apk:old": "node apk/compress.js --old",
+    "postinstall": "node -e \"var p='node_modules/react-native-launcher-kit',s=p+'/src',t=p+'/typescript';var fs=require('fs');if(fs.existsSync(p)&&!fs.existsSync(s)&&fs.existsSync(t)){fs.cpSync(t,s,{recursive:true});console.log('Patched react-native-launcher-kit: copied typescript -> src')}\""
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.1.1",
+    "@react-native-community/slider": "^5.2.0",
+    "expo": "~54.0.33",
+    "expo-blur": "~15.0.8",
+    "expo-file-system": "~19.0.22",
+    "expo-image-picker": "~17.0.11",
+    "expo-linear-gradient": "~15.0.8",
+    "expo-status-bar": "~3.0.9",
+    "pinyin-pro": "^3.28.1",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-haptic-feedback": "^3.0.0",
+    "react-native-launcher-kit": "^2.1.0"
+  },
+  "private": true
+}
