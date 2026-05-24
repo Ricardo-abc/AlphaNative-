@@ -24,7 +24,7 @@ interface VibrationSettingsProps {
   onBack: () => void;
 }
 
-const HAPTIC_EFFECTS: { label: string; value: AppSettings['vibrationEffect']; category: string }[] = [
+const getHapticEffects = (): { label: string; value: AppSettings['vibrationEffect']; category: string }[] => [
   { label: t('settings.vibration.effects.keyboardTap'), value: 'keyboardTap', category: t('settings.vibration.categories.basic') },
   { label: t('settings.vibration.effects.selection'), value: 'selection', category: t('settings.vibration.categories.basic') },
   { label: t('settings.vibration.effects.soft'), value: 'soft', category: t('settings.vibration.categories.basic') },
@@ -75,6 +75,7 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
   const [activeIndex, setActiveIndex] = useState(0);
   const [isSliding, setIsSliding] = useState(false);
 
+  const HAPTIC_EFFECTS = useMemo(() => getHapticEffects(), []);
   const alphabet = ALPHABET;
   const lastVibratedIndex = useRef(-1);
   const selectedEffectRef = useRef(selectedEffect);
