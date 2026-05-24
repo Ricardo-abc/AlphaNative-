@@ -8,8 +8,13 @@ const i18n = new I18n({ zh, en });
 i18n.enableFallback = true;
 i18n.defaultLocale = 'zh';
 
-const deviceLocale = Localization.locale;
-i18n.locale = deviceLocale.startsWith('zh') ? 'zh' : 'en';
+try {
+  const locales = Localization.getLocales();
+  const deviceLocale = locales.length > 0 ? locales[0].languageCode : 'zh';
+  i18n.locale = deviceLocale.startsWith('zh') ? 'zh' : 'en';
+} catch (e) {
+  i18n.locale = 'zh';
+}
 
 export default i18n;
 export const t = (key: string, options?: object) => i18n.t(key, options);
