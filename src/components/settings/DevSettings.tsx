@@ -54,6 +54,42 @@ const DevSettings: React.FC<DevSettingsProps> = ({ settings, onUpdate, onReset }
 
           <View style={styles.cardItem}>
             <SettingSlider
+              label="波浪弯曲上限"
+              value={settings.waveShapeCap}
+              min={10}
+              max={100}
+              step={5}
+              unit="dp"
+              themeColor={settings.themeColor}
+              onChange={(v) => onUpdate('waveShapeCap', v)}
+            />
+            <Text style={styles.description}>
+              限制波浪最大弯曲拉伸幅度，超出部分作为轨道整体横向平移。
+            </Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.cardItem}>
+            <SettingSlider
+              label="波浪纵向展开"
+              value={settings.waveVerticalSpread}
+              min={0.0}
+              max={2.0}
+              step={0.1}
+              unit=""
+              themeColor={settings.themeColor}
+              onChange={(v) => onUpdate('waveVerticalSpread', v)}
+            />
+            <Text style={styles.description}>
+              拉拽波浪时，字母之间的纵向拉伸间隔。
+            </Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.cardItem}>
+            <SettingSlider
               label="选中缩放"
               value={settings.activeScale}
               min={1.0}

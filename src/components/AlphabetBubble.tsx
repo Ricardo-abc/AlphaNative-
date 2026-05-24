@@ -47,13 +47,13 @@ const AlphabetBubble: React.FC<AlphabetBubbleProps> = ({
 }) => {
   const { settings } = useSettingsContext();
   const { alphabet } = useRailAlphabet(apps);
-  const { bubbleSize, bubbleOffset, waveIntensity, themeColor, bubbleOpacity, shadowIntensity, railLength } = settings;
+  const { bubbleSize, bubbleOffset, waveIntensity, themeColor, bubbleOpacity, shadowIntensity } = settings;
 
   const letterFontSize = 11;
   const lineHeightMultiplier = 1.2;
   const letterHeight = letterFontSize * lineHeightMultiplier;
   const totalLetterHeight = alphabet.length * letterHeight;
-  const gap = (railLength - totalLetterHeight) / (alphabet.length - 1);
+  const gap = (railHeight - totalLetterHeight) / (alphabet.length - 1);
 
   const bubbleY = activeIndexAnim.interpolate({
     inputRange: Array.from({ length: alphabet.length }, (_, i) => i),
@@ -64,14 +64,34 @@ const AlphabetBubble: React.FC<AlphabetBubbleProps> = ({
     extrapolate: 'clamp',
   });
 
+  // 声明式插值：与轨道一致的弯曲上限与平移逻辑
+  const cappedPull = useMemo(() => {
+    return pullX.interpolate({
+      inputRange: [0, settings.waveShapeCap],
+      outputRange: [0, settings.waveShapeCap],
+      extrapolate: 'clamp',
+    });
+  }, [pullX, settings.waveShapeCap]);
+
+  const wholeShift = useMemo(() => {
+    return pullX.interpolate({
+      inputRange: [0, settings.waveShapeCap, settings.waveShapeCap + 1000],
+      outputRange: [0, 0, 1000],
+      extrapolate: 'clamp',
+    });
+  }, [pullX, settings.waveShapeCap]);
+
   // 选中字母的波浪因子（dist=0 时）：1.3 * waveIntensity
   const waveFactor = 1.3 * waveIntensity;
-  const bubbleX = useMemo(() =>
-    side === 'left'
-      ? Animated.multiply(pullX, waveFactor)
-      : Animated.multiply(Animated.multiply(pullX, waveFactor), -1),
-    [pullX, waveFactor, side]
-  );
+  const directionMultiplier = side === 'left' ? 1 : -1;
+
+  const bubbleX = useMemo(() => {
+    const bubbleShift = Animated.add(
+      Animated.multiply(cappedPull, waveFactor),
+      wholeShift
+    );
+    return Animated.multiply(bubbleShift, directionMultiplier);
+  }, [cappedPull, waveFactor, wholeShift, directionMultiplier]);
 
   const bubbleStyle = useMemo(() => ({
     width: bubbleSize,

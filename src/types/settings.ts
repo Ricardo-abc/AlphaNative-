@@ -72,6 +72,8 @@ export interface AppSettings {
   devClickCount: number;
   waveIntensity: number;        // 范围: 0~2, 默认: 1.0
   waveDecay: number;            // 范围: 0.001~0.5, 默认: 0.02 波浪衰减系数
+  waveShapeCap: number;         // 范围: 10~100, 默认: 45 波浪弯曲上限
+  waveVerticalSpread: number;   // 范围: 0~2, 默认: 0.0 波浪纵向展开幅度
   enableMotionBlur: boolean;    // 默认: true 运动模糊开关
   motionBlurIntensity: number;  // 范围: 0~1, 默认: 0.6 运动模糊强度
   activeScale: number;          // 范围: 1.0~2.5, 默认: 1.8 选中字母缩放

@@ -59,6 +59,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   devClickCount: 0,
   waveIntensity: 1.0,
   waveDecay: 0.02,
+  waveShapeCap: 45,
+  waveVerticalSpread: 0.0,
   enableMotionBlur: true,
   motionBlurIntensity: 0.6,
   activeScale: 1.8,

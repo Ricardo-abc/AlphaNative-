@@ -49,7 +49,11 @@
       "motionBlur": "Motion Blur",
       "blurIntensity": "Blur Intensity",
       "bottomSelect": "#Bottom Select#",
-      "topSelect": "*Top Select*"
+      "topSelect": "*Top Select*",
+      "waveIntensity": "Wave Bend Intensity",
+      "waveDecay": "Wave Spread/Concentration",
+      "waveShapeCap": "Wave Bend Cap",
+      "waveVerticalSpread": "Wave Vertical Spread"
     },
     "bubble": {
       "title": "Bubble",

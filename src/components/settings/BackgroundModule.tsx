@@ -1,12 +1,12 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform, PermissionsAndroid } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { AppSettings } from '../../types/settings';
 import SettingModule from './SettingModule';
 import { SettingItem, SettingToggle, SettingSelector, SettingSliderItem } from './SettingItems';
 import { getEffectNames, getEffect } from '../../effects/registry';
-import { getSystemWallpaper, setWallpaper } from '../../modules/WallpaperBridge';
+import { setWallpaper } from '../../modules/WallpaperBridge';
 import WallpaperCarousel from '../WallpaperCarousel';
 
 interface BackgroundModuleProps {
@@ -29,24 +29,6 @@ const BackgroundModule: React.FC<BackgroundModuleProps> = ({ settings, onUpdate 
     ...getEffectNames().map(e => ({ label: e.name, value: e.key })),
   ];
 
-  const requestMediaPermission = async (): Promise<boolean> => {
-    if (Platform.OS !== 'android') return true;
-    try {
-      if (Platform.Version >= 33) {
-        const result = await PermissionsAndroid.request(
-          'android.permission.READ_MEDIA_IMAGES' as any
-        );
-        return result === PermissionsAndroid.RESULTS.GRANTED;
-      } else {
-        const result = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
-        );
-        return result === PermissionsAndroid.RESULTS.GRANTED;
-      }
-    } catch {
-      return false;
-    }
-  };
 
   const handleAddWallpaper = async () => {
     try {
@@ -54,28 +36,39 @@ const BackgroundModule: React.FC<BackgroundModuleProps> = ({ settings, onUpdate 
         mediaTypes: ['images'],
         quality: 0.7,
         base64: false,
+        allowsMultipleSelection: true,
       });
 
-      if (result.canceled || !result.assets[0]?.uri) return;
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
 
-      const sourceUri = result.assets[0].uri;
       const dir = `${FileSystem.documentDirectory}wallpapers/`;
       await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-      const filename = `wallpaper_${Date.now()}.jpg`;
-      const destUri = `${dir}${filename}`;
 
-      await FileSystem.copyAsync({
-        from: sourceUri,
-        to: destUri,
-      });
+      const newUris: string[] = [];
+      const now = Date.now();
 
-      const newList = [...settings.wallpapers, destUri];
+      for (let i = 0; i < result.assets.length; i++) {
+        const asset = result.assets[i];
+        if (asset.uri) {
+          const filename = `wallpaper_${now}_${i}.jpg`;
+          const destUri = `${dir}${filename}`;
+          await FileSystem.copyAsync({
+            from: asset.uri,
+            to: destUri,
+          });
+          newUris.push(destUri);
+        }
+      }
+
+      if (newUris.length === 0) return;
+
+      const newList = [...settings.wallpapers, ...newUris];
       onUpdate('wallpapers', newList);
 
-      if (newList.length === 1) {
+      if (settings.wallpapers.length === 0) {
         onUpdate('enableBackgroundImage', true);
         onUpdate('currentWallpaperIndex', 0);
-        setWallpaper(destUri);
+        setWallpaper(newUris[0]);
       }
     } catch (e) {
       console.error('[Wallpaper] Add failed:', e);
@@ -83,31 +76,6 @@ const BackgroundModule: React.FC<BackgroundModuleProps> = ({ settings, onUpdate 
     }
   };
 
-  const handleAddSystemWallpaper = async () => {
-    try {
-      const hasPermission = await requestMediaPermission();
-      if (!hasPermission) {
-        Alert.alert('权限不足', '需要存储权限才能读取系统壁纸');
-        return;
-      }
-
-      const dataUri = await getSystemWallpaper();
-      if (!dataUri) {
-        Alert.alert('提示', '无法获取系统壁纸');
-        return;
-      }
-      const newList = [...settings.wallpapers, dataUri];
-      onUpdate('wallpapers', newList);
-      if (newList.length === 1) {
-        onUpdate('enableBackgroundImage', true);
-        onUpdate('currentWallpaperIndex', 0);
-      }
-      setWallpaper(dataUri);
-    } catch (e) {
-      console.error('[Wallpaper] System wallpaper failed:', e);
-      Alert.alert('错误', '获取系统壁纸失败');
-    }
-  };
 
   const handleSelectWallpaper = (index: number) => {
     onUpdate('currentWallpaperIndex', index);
@@ -182,9 +150,6 @@ const BackgroundModule: React.FC<BackgroundModuleProps> = ({ settings, onUpdate 
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.pickButton} onPress={handleAddWallpaper} activeOpacity={0.7}>
             <Text style={styles.pickButtonText}>+ 相册</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.systemButton} onPress={handleAddSystemWallpaper} activeOpacity={0.7}>
-            <Text style={styles.systemButtonText}>系统壁纸</Text>
           </TouchableOpacity>
         </View>
       </SettingItem>
@@ -293,8 +258,7 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', gap: 8 },
   pickButton: { backgroundColor: '#2C2C2E', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: '#3b82f6' },
   pickButtonText: { color: '#3b82f6', fontSize: 14, fontWeight: '600' },
-  systemButton: { backgroundColor: '#2C2C2E', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: '#34C759' },
-  systemButtonText: { color: '#34C759', fontSize: 14, fontWeight: '600' },
+
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 12 },
   sectionHint: { color: '#666', fontSize: 12, marginBottom: 8 },
   timerOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

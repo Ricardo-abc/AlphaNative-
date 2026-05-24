@@ -172,6 +172,47 @@ export const RailModule: React.FC<RailModuleProps> = ({ settings, onUpdate, onNa
       value={settings.enableTopRailSelect}
       onChange={(v) => onUpdate('enableTopRailSelect', v)}
     />
+
+    <SettingSliderItem
+      label={t('settings.rail.waveIntensity')}
+      value={settings.waveIntensity}
+      min={0}
+      max={2}
+      step={0.1}
+      unit=""
+      themeColor={settings.themeColor}
+      onChange={(v) => onUpdate('waveIntensity', v)}
+    />
+    <SettingSliderItem
+      label={t('settings.rail.waveDecay')}
+      value={settings.waveDecay}
+      min={0.005}
+      max={0.1}
+      step={0.005}
+      unit=""
+      themeColor={settings.themeColor}
+      onChange={(v) => onUpdate('waveDecay', v)}
+    />
+    <SettingSliderItem
+      label={t('settings.rail.waveShapeCap')}
+      value={settings.waveShapeCap}
+      min={10}
+      max={100}
+      step={5}
+      unit="dp"
+      themeColor={settings.themeColor}
+      onChange={(v) => onUpdate('waveShapeCap', v)}
+    />
+    <SettingSliderItem
+      label={t('settings.rail.waveVerticalSpread')}
+      value={settings.waveVerticalSpread}
+      min={0.0}
+      max={2.0}
+      step={0.1}
+      unit=""
+      themeColor={settings.themeColor}
+      onChange={(v) => onUpdate('waveVerticalSpread', v)}
+    />
   </SettingModule>
 );
 

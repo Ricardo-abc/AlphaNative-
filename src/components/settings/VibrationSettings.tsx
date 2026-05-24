@@ -69,6 +69,32 @@ const triggerHaptic = (effect: AppSettings['vibrationEffect'], intensity: number
   ReactNativeHapticFeedback.trigger(effect, { enableVibrateFallback: true, ignoreAndroidSystemSettings: false });
 };
 
+function interpolateHexColor(color1: string, color2: string, ratio: number): string {
+  const parseHex = (hex: string) => {
+    let cleaned = hex.replace('#', '');
+    if (cleaned.length === 3) {
+      cleaned = cleaned.split('').map(c => c + c).join('');
+    }
+    const num = parseInt(cleaned, 16);
+    return {
+      r: (num >> 16) & 255,
+      g: (num >> 8) & 255,
+      b: num & 255,
+    };
+  };
+
+  try {
+    const rgb1 = parseHex(color1);
+    const rgb2 = parseHex(color2);
+    const r = Math.round(rgb1.r + (rgb2.r - rgb1.r) * ratio);
+    const g = Math.round(rgb1.g + (rgb2.g - rgb1.g) * ratio);
+    const b = Math.round(rgb1.b + (rgb2.b - rgb1.b) * ratio);
+    return `rgb(${r}, ${g}, ${b})`;
+  } catch (e) {
+    return color2;
+  }
+}
+
 const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdate, onConfirm, onBack }) => {
   const [selectedEffect, setSelectedEffect] = useState(settings.vibrationEffect);
   const [intensity, setIntensity] = useState(settings.vibrationIntensity);
@@ -87,7 +113,8 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
   const bubbleSize = settings.bubbleSize;
   const bubbleOffset = settings.bubbleOffset;
   const { 
-    themeColor, railColor, enableRailColorChange, waveIntensity, waveDecay, 
+    themeColor, railColor, railActiveColor, enableRailColorChange, waveIntensity, waveDecay, 
+    waveShapeCap, waveVerticalSpread,
     enableMotionBlur, motionBlurIntensity,
     railFontFamily, railFontWeight, railFontSize 
   } = settings;
@@ -110,6 +137,32 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
     }
     return table;
   }, [alphabet.length, waveDecay, waveIntensity]);
+
+  // 预计算纵向展开因子表：与 LetterRail 一致
+  const cumulativeSpreadTable = useMemo(() => {
+    const table = new Array(alphabet.length).fill(0);
+    if (activeIndex < 0) return table;
+
+    // activeIndex 以上的字母：向上推 (负位移)
+    let sumUp = 0;
+    for (let i = activeIndex - 1; i >= 0; i--) {
+      const dist = activeIndex - i;
+      const factor = waveFactorTable[dist] || 0;
+      sumUp += factor;
+      table[i] = -sumUp;
+    }
+
+    // activeIndex 以下的字母：向下推 (正位移)
+    let sumDown = 0;
+    for (let i = activeIndex + 1; i < alphabet.length; i++) {
+      const dist = i - activeIndex;
+      const factor = waveFactorTable[dist] || 0;
+      sumDown += factor;
+      table[i] = sumDown;
+    }
+
+    return table;
+  }, [activeIndex, alphabet.length, waveFactorTable]);
 
   // 字母布局计算 - 使用 space-between 方式
   const letterFontSize = 11;
@@ -258,10 +311,19 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
             {alphabet.map((letter, index) => {
               const dist = Math.abs(index - activeIndex);
 
-              // 波浪位移
+              // 波浪位移 (弯曲上限与整体平移)
               const waveFactor = waveFactorTable[dist] || 0;
+              const cappedPull = Math.min(80, waveShapeCap);
+              const wholeShift = Math.max(0, 80 - waveShapeCap);
+              
               const waveTranslateX = isSliding
-                ? -80 * waveFactor
+                ? - (cappedPull * waveFactor + wholeShift)
+                : 0;
+
+              // 纵向展开
+              const cumulativeFactor = cumulativeSpreadTable[index] || 0;
+              const waveTranslateY = isSliding && waveVerticalSpread > 0
+                ? 80 * cumulativeFactor * waveVerticalSpread
                 : 0;
 
               // 运动模糊效果
@@ -270,14 +332,25 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
                 : 1;
 
               // 选中字母颜色
-              const color = enableRailColorChange && isSliding && dist === 0
-                ? themeColor
+              const ratio = (isSliding && waveIntensity > 0) ? Math.min(1, waveFactor / waveIntensity) : 0;
+              const baseColor = interpolateHexColor(railColor, railActiveColor, ratio);
+
+              const color = enableRailColorChange && isSliding
+                ? (dist === 0 ? themeColor : baseColor)
                 : (letter === '*' ? themeColor : railColor);
 
               // 缩放效果
               const motionBlurScale = enableMotionBlur && isSliding
                 ? 1 - dist * 0.03
                 : 1;
+
+              const transforms: any[] = [
+                { translateX: waveTranslateX },
+                { scale: motionBlurScale },
+              ];
+              if (waveTranslateY !== 0) {
+                transforms.push({ translateY: waveTranslateY });
+              }
 
               return (
                 <View
@@ -287,10 +360,7 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
                     {
                       height: letterHeight + gap,
                       opacity: motionBlurOpacity,
-                      transform: [
-                        { translateX: waveTranslateX },
-                        { scale: motionBlurScale },
-                      ],
+                      transform: transforms,
                     },
                   ]}
                 >
@@ -324,7 +394,9 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
                 top: getLetterCenterY(activeIndex) - bubbleSize / 2,
                 right: bubbleOffset,
                 transform: [{
-                  translateX: isSliding ? -80 * 1.3 * waveIntensity : 0
+                  translateX: isSliding 
+                    ? - (Math.min(80, waveShapeCap) * 1.3 * waveIntensity + Math.max(0, 80 - waveShapeCap))
+                    : 0
                 }],
               },
             ]}

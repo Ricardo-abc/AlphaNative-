@@ -49,7 +49,11 @@
       "motionBlur": "运动模糊",
       "blurIntensity": "模糊强度",
       "bottomSelect": "#下方选中#",
-      "topSelect": "*上方选中*"
+      "topSelect": "*上方选中*",
+      "waveIntensity": "波浪弯曲强度",
+      "waveDecay": "波浪范围/集中度",
+      "waveShapeCap": "波浪弯曲上限",
+      "waveVerticalSpread": "波浪纵向展开"
     },
     "bubble": {
       "title": "气泡",

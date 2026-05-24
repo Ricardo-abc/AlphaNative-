@@ -75,6 +75,7 @@ function AppContent() {
   const { alphabet: activeAlphabet } = useRailAlphabet(cachedApps);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const [favoritesHeight, setFavoritesHeight] = useState(
     settings.favoritesHeightMode === 'fixed' ? settings.favoritesFixedHeight : 300
   );
@@ -125,7 +126,7 @@ function AppContent() {
   useEffect(() => { railHeightRef.current = settings.railHeight; }, [settings.railHeight]);
   useEffect(() => { favoritesHeightRef.current = favoritesHeight; }, [favoritesHeight]);
 
-  const fixedRailTop = useMemo(() => height - settings.railHeight - RAIL_BOTTOM_PADDING, [settings.railHeight]);
+  const fixedRailTop = useMemo(() => Math.max(20, height - settings.railHeight - RAIL_BOTTOM_PADDING), [settings.railHeight]);
   const fixedRailTopRef = useRef(fixedRailTop);
   useEffect(() => { fixedRailTopRef.current = fixedRailTop; }, [fixedRailTop]);
 
@@ -415,21 +416,24 @@ function AppContent() {
         animationVersionRef.current++;
         isSlidingRef.current = true;
         setIsSliding(true);
+        setIsDragging(true);
         handleGrantRef.current?.(gs.y0, side);
       },
       onPanResponderMove: (_, gs) => {
         handleTouchRef.current?.(gs.moveY, railTopRef.current);
-        const maxPull = width - 100;
+        const intensity = settings.waveIntensity > 0 ? settings.waveIntensity : 0.1;
+        const maxPull = (width - 20 - settings.bubbleOffset - settings.bubbleSize) / (1.3 * intensity);
         const defaultPull = 80;
         const pull = side === 'right'
           ? Math.max(0, -gs.dx)
           : Math.max(0, gs.dx);
         const swipeThreshold = 40;
         const finalPull = pull > swipeThreshold ? Math.min(defaultPull + pull - swipeThreshold, maxPull) : defaultPull;
-        pullXAnim.setValue(finalPull);
+        pullXAnim.setValue(Math.max(0, finalPull));
       },
       onPanResponderRelease: () => {
         isSlidingRef.current = false;
+        setIsDragging(false);
         const currentVersion = animationVersionRef.current;
 
         // 退出 Scrub：淡出 overlay
@@ -473,6 +477,7 @@ function AppContent() {
       },
       onPanResponderTerminate: () => {
         isSlidingRef.current = false;
+        setIsDragging(false);
         const currentVersion = animationVersionRef.current;
 
         // 退出 Scrub
@@ -664,12 +669,12 @@ function AppContent() {
   }
 
   const bgEnabled = settings.enableBackgroundImage && settings.wallpapers.length > 0;
-  const containerBg = bgEnabled ? 'transparent' : '#06060c';
-  const listBg = bgEnabled ? `rgba(6,6,12,${settings.listBgOpacity})` : 'transparent';
+  const containerBg = 'transparent';
+  const listBg = `rgba(6,6,12,${settings.listBgOpacity})`;
 
   return (
     <View style={[styles.container, { backgroundColor: containerBg }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#06060c" />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
       <WallpaperBackground />
 
       {settings.showTouchZone && (
@@ -753,6 +758,7 @@ function AppContent() {
         activeIndex={activeIndex}
         activeIndexAnim={activeIndexAnim}
         isSliding={isSliding}
+        isDragging={isDragging}
         colorSource={colorSource}
         top={railTop}
         height={settings.railHeight}
