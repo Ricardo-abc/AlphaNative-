@@ -18,7 +18,8 @@ import {
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 
 import AppItem from './src/components/AppItem';
-import LetterRail from './src/components/LetterRail';
+import LetterRail, { LetterRailRef } from './src/components/LetterRail';
+import ScrubOverlay, { ScrubOverlayRef } from './src/components/ScrubOverlay';
 import AlphabetBubble from './src/components/AlphabetBubble';
 import FavoritesHeader from './src/components/FavoritesHeader';
 import SettingsView from './src/components/SettingsView';
@@ -73,13 +74,10 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
 
   const { alphabet: activeAlphabet } = useRailAlphabet(cachedApps);
-  const [scrollOffset, setScrollOffset] = useState(0);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [favoritesHeight, setFavoritesHeight] = useState(
     settings.favoritesHeightMode === 'fixed' ? settings.favoritesFixedHeight : 300
   );
-  const [scrubItems, setScrubItems] = useState<FlatItem[]>([]);
   const scrubOpacity = useRef(new Animated.Value(0)).current;
   const scrubLetterRef = useRef<string | null>(null);
 
@@ -93,6 +91,8 @@ function AppContent() {
   const [favoritesRefreshKey, setFavoritesRefreshKey] = useState(0);
 
   // ===== Refs =====
+  const letterRailRef = useRef<LetterRailRef>(null);
+  const scrubOverlayRef = useRef<ScrubOverlayRef>(null);
   const activeLetterRef = useRef<string | null>(null);
   const activeIndexRef = useRef(0);
   const isSlidingRef = useRef(false);
@@ -100,6 +100,15 @@ function AppContent() {
   const railTopRef = useRef(height - settings.railHeight - RAIL_BOTTOM_PADDING);
   const lastVibrateTime = useRef(0);
   const lastVibratedIndex = useRef(-1);
+  const vibrateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (vibrateTimeoutRef.current) {
+        clearTimeout(vibrateTimeoutRef.current);
+      }
+    };
+  }, []);
   const lastTouchY = useRef(0);
   const lastTouchTime = useRef(0);
   const touchVelocity = useRef(0);
@@ -110,7 +119,6 @@ function AppContent() {
   const pullXAnim = useRef(new Animated.Value(0)).current;
   const favoritesHeightRef = useRef(favoritesHeight);
   const animationVersionRef = useRef(0);
-  const [colorSource, setColorSource] = useState<'rail' | 'list'>('list');
   const scrollOffsetRef = useRef(0);
   const settingsRef = useRef(settings);
   const activeAlphabetRef = useRef(activeAlphabet);
@@ -132,13 +140,13 @@ function AppContent() {
 
   // ===== 预计算列表数据 =====
   const { flatItems, letterIndexMap, itemOffsets } = useMemo(() => {
-    const result = buildFlatList(cachedApps, favoritesHeight);
+    const result = buildFlatList(cachedApps, favoritesHeight, 44, customizations);
     return {
       flatItems: result.items,
       letterIndexMap: result.letterIndices,
       itemOffsets: result.offsets,
     };
-  }, [cachedApps, favoritesHeight]);
+  }, [cachedApps, favoritesHeight, customizations]);
 
   const letterIndexMapRef = useRef(letterIndexMap);
   const itemOffsetsRef = useRef(itemOffsets);
@@ -225,14 +233,15 @@ function AppContent() {
       if (editDialogVisible) { setEditDialogVisible(false); return true; }
       if (contextMenuVisible) { setContextMenuVisible(false); return true; }
       if (showSettings) { setShowSettings(false); return true; }
-      if (settings.enableBackToFavorites && scrollOffset > 0) {
+      if (settings.enableBackToFavorites && scrollOffsetRef.current > 0) {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
         return true;
       }
       return false;
     });
+
     return () => handler.remove();
-  }, [showSettings, scrollOffset, settings.enableBackToFavorites, contextMenuVisible, editDialogVisible]);
+  }, [showSettings, settings.enableBackToFavorites, contextMenuVisible, editDialogVisible]);
 
   useEffect(() => {
     Animated.timing(listOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
@@ -264,16 +273,34 @@ function AppContent() {
     activeLetterRef.current = newLetter;
     activeIndexRef.current = idx;
     
-    setColorSource('rail');
-    setActiveIndex(idx);
+    letterRailRef.current?.setColorSource('rail');
+    letterRailRef.current?.setActiveIndex(idx);
     activeIndexAnim.setValue(idx);
     
     bubbleYAnim.setValue(yPosition);
 
     // 字母变化时震动反馈
     if (settings.enableVibration && idx !== lastVibratedIndex.current) {
-      lastVibratedIndex.current = idx;
-      triggerHaptic(settings.vibrationEffect, settings.vibrationIntensity);
+      if (vibrateTimeoutRef.current) {
+        clearTimeout(vibrateTimeoutRef.current);
+        vibrateTimeoutRef.current = null;
+      }
+
+      const timeDiff = now - lastVibrateTime.current;
+      if (timeDiff >= 40) {
+        lastVibratedIndex.current = idx;
+        lastVibrateTime.current = now;
+        triggerHaptic(settings.vibrationEffect, settings.vibrationIntensity);
+      } else {
+        const delay = 40 - timeDiff;
+        vibrateTimeoutRef.current = setTimeout(() => {
+          if (isSlidingRef.current && idx !== lastVibratedIndex.current) {
+            lastVibratedIndex.current = idx;
+            lastVibrateTime.current = Date.now();
+            triggerHaptic(settings.vibrationEffect, settings.vibrationIntensity);
+          }
+        }, delay);
+      }
     }
 
     // 直接滚动全量列表到目标字母位置
@@ -291,11 +318,9 @@ function AppContent() {
       scrubLetterRef.current = newLetter;
       const data = scrubDataMapRef.current[newLetter];
       if (data) {
-        setScrubItems(data.items);
-        setScrubOffsets(data.offsets);
+        scrubOverlayRef.current?.setItems(data.items, data.offsets);
       } else {
-        setScrubItems([]);
-        setScrubOffsets([]);
+        scrubOverlayRef.current?.setItems([], []);
       }
     }
   };
@@ -358,15 +383,20 @@ function AppContent() {
     activeLetterRef.current = newLetter;
     activeIndexRef.current = idx;
     
-    setColorSource('rail');
-    setActiveIndex(idx);
+    letterRailRef.current?.setColorSource('rail');
+    letterRailRef.current?.setActiveIndex(idx);
     activeIndexAnim.setValue(idx);
     
     bubbleYAnim.setValue(y0);
     
     // 首次选中时强震动反馈
     if (settings.enableVibration) {
+      if (vibrateTimeoutRef.current) {
+        clearTimeout(vibrateTimeoutRef.current);
+        vibrateTimeoutRef.current = null;
+      }
       triggerHaptic(settings.vibrationEffect, 5);
+      lastVibrateTime.current = Date.now();
       lastVibratedIndex.current = idx;
     }
 
@@ -393,8 +423,7 @@ function AppContent() {
       scrubLetterRef.current = newLetter;
       const data = scrubDataMapRef.current[newLetter];
       if (data) {
-        setScrubItems(data.items);
-        setScrubOffsets(data.offsets);
+        scrubOverlayRef.current?.setItems(data.items, data.offsets);
         Animated.parallel([
           Animated.timing(scrubOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
           Animated.timing(listOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
@@ -436,6 +465,17 @@ function AppContent() {
         setIsDragging(false);
         const currentVersion = animationVersionRef.current;
 
+        if (vibrateTimeoutRef.current) {
+          clearTimeout(vibrateTimeoutRef.current);
+          vibrateTimeoutRef.current = null;
+        }
+
+        if (settings.enableVibration && activeIndexRef.current !== lastVibratedIndex.current) {
+          lastVibratedIndex.current = activeIndexRef.current;
+          lastVibrateTime.current = Date.now();
+          triggerHaptic(settings.vibrationEffect, settings.vibrationIntensity);
+        }
+
         // 退出 Scrub：淡出 overlay
         if (scrubLetterRef.current) {
           scrubLetterRef.current = null;
@@ -443,8 +483,7 @@ function AppContent() {
             Animated.timing(scrubOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
             Animated.timing(listOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
           ]).start(() => {
-            setScrubItems([]);
-            setScrubOffsets([]);
+            scrubOverlayRef.current?.setItems([], []);
           });
         }
 
@@ -480,6 +519,11 @@ function AppContent() {
         setIsDragging(false);
         const currentVersion = animationVersionRef.current;
 
+        if (vibrateTimeoutRef.current) {
+          clearTimeout(vibrateTimeoutRef.current);
+          vibrateTimeoutRef.current = null;
+        }
+
         // 退出 Scrub
         if (scrubLetterRef.current) {
           scrubLetterRef.current = null;
@@ -487,8 +531,7 @@ function AppContent() {
             Animated.timing(scrubOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
             Animated.timing(listOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
           ]).start(() => {
-            setScrubItems([]);
-            setScrubOffsets([]);
+            scrubOverlayRef.current?.setItems([], []);
           });
         }
 
@@ -547,8 +590,8 @@ function AppContent() {
       const idx = activeAlphabetRef.current.indexOf(focusedLetter);
       if (idx >= 0) {
         activeIndexRef.current = idx;
-        setColorSource('list');
-        setActiveIndex(idx);
+        letterRailRef.current?.setColorSource('list');
+        letterRailRef.current?.setActiveIndex(idx);
         activeIndexAnim.setValue(idx);
       }
     }
@@ -652,12 +695,6 @@ function AppContent() {
 
   const keyExtractor = useCallback((item: FlatItem) => item.id, []);
 
-  const getScrubItemLayout = useCallback((_: any, index: number) => ({
-    length: scrubItems[index]?._type === 'header' ? HEADER_HEIGHT : settings.appItemHeight,
-    offset: scrubOffsets[index] || 0,
-    index,
-  }), [scrubItems, scrubOffsets, settings.appItemHeight]);
-
   // ===== Render =====
   if (loading || !isLoaded) {
     return (
@@ -668,7 +705,6 @@ function AppContent() {
     );
   }
 
-  const bgEnabled = settings.enableBackgroundImage && settings.wallpapers.length > 0;
   const containerBg = 'transparent';
   const listBg = `rgba(6,6,12,${settings.listBgOpacity})`;
 
@@ -715,9 +751,7 @@ function AppContent() {
               />
             }
             onScroll={(e) => {
-              const y = e.nativeEvent.contentOffset.y;
-              setScrollOffset(y);
-              scrollOffsetRef.current = y;
+              scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
             }}
             scrollEventThrottle={16}
           />
@@ -725,21 +759,13 @@ function AppContent() {
       </View>
 
       {/* Scrub 遮罩 */}
-      {scrubItems.length > 0 && (
-        <Animated.View style={[styles.scrubOverlay, { opacity: scrubOpacity }]} pointerEvents="none">
-          <View style={{ flex: 1 }}>
-            <FlatList
-              data={scrubItems}
-              keyExtractor={keyExtractor}
-              renderItem={renderItem}
-              getItemLayout={getScrubItemLayout}
-              scrollEnabled={false}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingTop: height * settings.focusScrollRatio }}
-            />
-          </View>
-        </Animated.View>
-      )}
+      <ScrubOverlay
+        ref={scrubOverlayRef}
+        renderItem={renderItem}
+        focusScrollRatio={settings.focusScrollRatio}
+        scrubOpacity={scrubOpacity}
+        appItemHeight={settings.appItemHeight}
+      />
 
       <View style={styles.gestureStripRight} {...rightPanResponder.panHandlers} />
 
@@ -755,11 +781,10 @@ function AppContent() {
       )}
 
       <LetterRail
-        activeIndex={activeIndex}
+        ref={letterRailRef}
         activeIndexAnim={activeIndexAnim}
         isSliding={isSliding}
         isDragging={isDragging}
-        colorSource={colorSource}
         top={railTop}
         height={settings.railHeight}
         side={settings.railSide}
@@ -781,9 +806,11 @@ function AppContent() {
         visible={contextMenuVisible}
         app={contextMenuApp}
         isFavorite={contextMenuApp ? isFavorite(contextMenuApp.packageName, favorites) : false}
+        customizations={customizations}
         onClose={handleCloseContextMenu}
         onToggleFavorite={handleToggleFavorite}
         onEdit={handleOpenEdit}
+        onSaveCustomization={handleSaveCustomization}
       />
 
       {/* Edit Dialog */}

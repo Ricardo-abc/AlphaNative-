@@ -6,33 +6,37 @@ import { STORAGE_KEYS } from '../constants/storageKeys';
 import { AppInfo, AppCustomization, AppCustomizations, FlatItem, FlatListResult } from '../types/settings';
 
 /**
+ * 根据名称计算首字母（支持中文拼音转换）
+ */
+const calculateLetter = (name: string): string => {
+  if (!name) return '#';
+  const char = name.charAt(0);
+  if (/[a-zA-Z]/.test(char)) {
+    return char.toUpperCase();
+  } else if (/[\u4e00-\u9fa5]/.test(char)) {
+    try {
+      const pinyinStr = pinyin(char, { pattern: 'first', toneType: 'none' });
+      const letter = pinyinStr.charAt(0).toUpperCase();
+      return ALPHABET.includes(letter) ? letter : '#';
+    } catch {
+      return '#';
+    }
+  }
+  return '#';
+};
+
+/**
  * 格式化单个 app 数据
  */
 const formatApp = (app: any): AppInfo => {
-  let firstLetter = '#';
   const label = app.label || '';
-
-  if (label) {
-    const char = label.charAt(0);
-    if (/[a-zA-Z]/.test(char)) {
-      firstLetter = char.toUpperCase();
-    } else if (/[\u4e00-\u9fa5]/.test(char)) {
-      try {
-        const pinyinStr = pinyin(char, { pattern: 'first', toneType: 'none' });
-        firstLetter = pinyinStr.charAt(0).toUpperCase();
-      } catch {
-        firstLetter = '#';
-      }
-    }
-  }
-
   const iconUri = app.icon || '';
 
   return {
     id: app.packageName,
     name: label,
     packageName: app.packageName,
-    letter: ALPHABET.includes(firstLetter) ? firstLetter : '#',
+    letter: calculateLetter(label),
     icon: iconUri,
   };
 };
@@ -121,18 +125,34 @@ export const hasAppListChanged = (oldApps: AppInfo[], newApps: AppInfo[]): boole
 
 /**
  * 构建分组数据（用于连续列表）
+ * @param apps 应用列表
  * @param favoritesHeight 收藏区域高度偏移
  * @param headerHeight 字母分组标题高度
+ * @param customizations 自定义名称/图标配置
  */
-export const buildFlatList = (apps: AppInfo[], favoritesHeight: number = 0, headerHeight: number = 44): FlatListResult => {
+export const buildFlatList = (apps: AppInfo[], favoritesHeight: number = 0, headerHeight: number = 44, customizations: AppCustomizations = {}): FlatListResult => {
   const ITEM_HEIGHT = 64;
   const items: FlatItem[] = [];
   const letterIndices: Record<string, number> = {};
   const offsets: number[] = [];
   let currentOffset = favoritesHeight;
 
+  // 应用自定义名称，重新计算 letter
+  const displayApps = apps.map(app => {
+    const custom = customizations[app.packageName];
+    const displayName = custom?.customName || app.name;
+    return {
+      ...app,
+      name: displayName,
+      letter: calculateLetter(displayName),
+    };
+  });
+
+  // 按自定义名称排序
+  displayApps.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
   ALPHABET.forEach(letter => {
-    const letterApps = apps.filter(a => a.letter === letter);
+    const letterApps = displayApps.filter(a => a.letter === letter);
     if (letterApps.length === 0 && letter !== '#') return;
 
     letterIndices[letter] = items.length;
@@ -162,8 +182,9 @@ export const buildFlatList = (apps: AppInfo[], favoritesHeight: number = 0, head
  * @param apps 全量应用列表
  * @param letter 目标字母
  * @param headerHeight 字母分组标题高度
+ * @param customizations 自定义名称/图标配置
  */
-export const buildFilteredList = (apps: AppInfo[], letter: string, headerHeight: number = 44): FlatListResult => {
+export const buildFilteredList = (apps: AppInfo[], letter: string, headerHeight: number = 44, customizations: AppCustomizations = {}): FlatListResult => {
   const ITEM_HEIGHT = 64;
   const items: FlatItem[] = [];
   const offsets: number[] = [];
@@ -174,8 +195,22 @@ export const buildFilteredList = (apps: AppInfo[], letter: string, headerHeight:
   offsets.push(currentOffset);
   currentOffset += headerHeight;
 
+  // 应用自定义名称，重新计算 letter
+  const displayApps = apps.map(app => {
+    const custom = customizations[app.packageName];
+    const displayName = custom?.customName || app.name;
+    return {
+      ...app,
+      name: displayName,
+      letter: calculateLetter(displayName),
+    };
+  });
+
+  // 按自定义名称排序
+  displayApps.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
   // 只添加该字母的应用
-  const letterApps = apps.filter(a => a.letter === letter);
+  const letterApps = displayApps.filter(a => a.letter === letter);
   letterApps.forEach(app => {
     items.push({
       _type: 'app',

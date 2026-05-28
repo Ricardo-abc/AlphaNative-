@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,9 +9,12 @@ import {
   Dimensions,
   TouchableWithoutFeedback,
   Linking,
+  TextInput,
+  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { AppInfo } from '../types/settings';
+import * as ImagePicker from 'expo-image-picker';
+import { AppInfo, AppCustomization, AppCustomizations } from '../types/settings';
 import { useSettingsContext } from '../context/SettingsContext';
 import { EffectLayer } from '../effects';
 import { t } from '../i18n';
@@ -22,22 +25,29 @@ interface AppContextMenuProps {
   visible: boolean;
   app: AppInfo | null;
   isFavorite: boolean;
+  customizations: AppCustomizations;
   onClose: () => void;
   onToggleFavorite: () => void;
   onEdit: () => void;
+  onSaveCustomization: (packageName: string, customization: AppCustomization) => void;
 }
 
 const AppContextMenu: React.FC<AppContextMenuProps> = ({
   visible,
   app,
   isFavorite,
+  customizations,
   onClose,
   onToggleFavorite,
   onEdit,
+  onSaveCustomization,
 }) => {
   const { settings } = useSettingsContext();
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const sheetAnim = useRef(new Animated.Value(height)).current;
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingName, setEditingName] = useState('');
+  const nameInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (visible) {
@@ -67,12 +77,43 @@ const AppContextMenu: React.FC<AppContextMenuProps> = ({
           useNativeDriver: true,
         }),
       ]).start();
+      setIsEditingName(false);
+      setEditingName('');
     }
   }, [visible]);
 
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      // 添加延迟确保 TextInput 已经渲染完成
+      setTimeout(() => {
+        nameInputRef.current?.focus();
+      }, 100);
+    }
+  }, [isEditingName]);
+
   if (!visible || !app) return null;
 
+  const custom = customizations[app.packageName];
+  const displayName = custom?.customName || app.name;
+  const displayIcon = custom?.customIcon || app.icon;
+  const hasIcon = !!displayIcon && displayIcon.length > 5;
+
+  const handleClose = () => {
+    // 如果正在编辑名称，关闭编辑状态
+    if (isEditingName) {
+      setIsEditingName(false);
+      setEditingName('');
+      return;
+    }
+    onClose();
+  };
+
   const handleAppInfo = () => {
+    // 如果正在编辑名称，关闭编辑状态
+    if (isEditingName) {
+      setIsEditingName(false);
+      setEditingName('');
+    }
     onClose();
     setTimeout(() => {
       try {
@@ -85,22 +126,105 @@ const AppContextMenu: React.FC<AppContextMenuProps> = ({
   };
 
   const handleToggleFavorite = () => {
+    // 如果正在编辑名称，关闭编辑状态
+    if (isEditingName) {
+      setIsEditingName(false);
+      setEditingName('');
+    }
     onToggleFavorite();
     onClose();
   };
 
   const handleEdit = () => {
+    // 如果正在编辑名称，关闭编辑状态
+    if (isEditingName) {
+      setIsEditingName(false);
+      setEditingName('');
+    }
     onClose();
     setTimeout(() => onEdit(), 100);
   };
 
-  const hasIcon = !!app.icon && app.icon.length > 5;
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        let iconUri = '';
+        if (asset.base64) {
+          iconUri = `data:image/jpeg;base64,${asset.base64}`;
+        } else if (asset.uri) {
+          iconUri = asset.uri;
+        }
+
+        if (iconUri) {
+          const customization: AppCustomization = {
+            customName: custom?.customName,
+            customIcon: iconUri,
+          };
+          onSaveCustomization(app.packageName, customization);
+        }
+      }
+    } catch (e) {
+      console.error('[ImagePicker] Error:', e);
+    }
+  };
+
+  const handleStartEditName = () => {
+    setEditingName(displayName);
+    setIsEditingName(true);
+  };
+
+  const handleNameChange = (text: string) => {
+    setEditingName(text);
+    // 输入时自动保存
+    const trimmedName = text.trim();
+    if (trimmedName && trimmedName !== app.name) {
+      const customization: AppCustomization = {
+        customName: trimmedName,
+        customIcon: custom?.customIcon,
+      };
+      onSaveCustomization(app.packageName, customization);
+    } else if (!trimmedName || trimmedName === app.name) {
+      if (custom?.customIcon) {
+        onSaveCustomization(app.packageName, { customIcon: custom.customIcon });
+      } else {
+        onSaveCustomization(app.packageName, {});
+      }
+    }
+  };
+
+  const handleSaveName = () => {
+    setIsEditingName(false);
+    setEditingName('');
+  };
+
+  const handleNameSubmitEditing = () => {
+    handleSaveName();
+    // 按回车保存后不关闭菜单
+  };
+
+  const handleNameBlur = () => {
+    handleSaveName();
+    // 失焦时只保存，不关闭菜单
+  };
 
   const bgEnabled = settings.enableBackgroundImage && settings.wallpapers.length > 0;
 
   return (
-    <View style={styles.container}>
-      <TouchableWithoutFeedback onPress={onClose}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
+      <TouchableWithoutFeedback onPress={handleClose}>
         <Animated.View style={[styles.overlay, { opacity: overlayAnim, backgroundColor: bgEnabled ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.6)' }]} />
       </TouchableWithoutFeedback>
 
@@ -112,25 +236,41 @@ const AppContextMenu: React.FC<AppContextMenuProps> = ({
           intensity={settings.overlayEffectIntensity}
           style={[styles.sheetEffect, { backgroundColor: bgEnabled ? 'rgba(26,26,46,0.6)' : 'rgba(26,26,46,0.95)' }]}
         >
-        {/* App Preview - 点击图标或名称可直接编辑 */}
+        {/* App Preview - 点击图标直接选择图片，点击名称直接编辑 */}
         <View style={styles.appPreview}>
-          <TouchableOpacity onPress={handleEdit} activeOpacity={0.7}>
+          <TouchableOpacity onPress={handlePickImage} activeOpacity={0.7}>
             {hasIcon ? (
-              <Image source={{ uri: app.icon }} style={styles.previewIcon} />
+              <Image source={{ uri: displayIcon }} style={styles.previewIcon} />
             ) : (
               <View style={[styles.previewIcon, styles.fallbackIcon]}>
-                <Text style={styles.fallbackText}>{app.name.charAt(0)}</Text>
+                <Text style={styles.fallbackText}>{displayName.charAt(0)}</Text>
               </View>
             )}
             <View style={styles.iconEditBadge}>
               <Text style={styles.iconEditText}>✎</Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.appInfo} onPress={handleEdit} activeOpacity={0.7}>
-            <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
-            <Text style={styles.packageName} numberOfLines={1}>{app.packageName}</Text>
-            <Text style={styles.editHint}>{t('contextMenu.editHint')}</Text>
-          </TouchableOpacity>
+          <View style={styles.appInfo}>
+            {isEditingName ? (
+              <TextInput
+                ref={nameInputRef}
+                style={styles.nameInput}
+                value={editingName}
+                onChangeText={handleNameChange}
+                onSubmitEditing={handleNameSubmitEditing}
+                onBlur={handleNameBlur}
+                maxLength={30}
+                selectTextOnFocus
+                returnKeyType="done"
+              />
+            ) : (
+              <TouchableOpacity onPress={handleStartEditName} activeOpacity={0.7}>
+                <Text style={styles.appName} numberOfLines={1}>{displayName}</Text>
+                <Text style={styles.packageName} numberOfLines={1}>{app.packageName}</Text>
+                <Text style={styles.editHint}>{t('contextMenu.editHint')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         <View style={styles.divider} />
@@ -160,7 +300,7 @@ const AppContextMenu: React.FC<AppContextMenuProps> = ({
         </TouchableOpacity>
         </EffectLayer>
       </Animated.View>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -235,6 +375,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 4,
+  },
+  nameInput: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
   },
   packageName: {
     color: '#666',

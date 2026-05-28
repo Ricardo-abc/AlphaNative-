@@ -4,12 +4,15 @@ import { useRailAlphabet } from '../hooks/useActiveAlphabet';
 import { useSettingsContext } from '../context/SettingsContext';
 import { AppInfo } from '../types/settings';
 
+export interface LetterRailRef {
+  setActiveIndex: (idx: number) => void;
+  setColorSource: (source: 'rail' | 'list') => void;
+}
+
 interface LetterRailProps {
-  activeIndex: number;
   activeIndexAnim: Animated.Value;
   isSliding: boolean;
   isDragging: boolean;
-  colorSource: 'rail' | 'list';
   top: number;
   height: number;
   side: 'left' | 'right';
@@ -18,35 +21,9 @@ interface LetterRailProps {
   apps: AppInfo[];
 }
 
-function interpolateHexColor(color1: string, color2: string, ratio: number): string {
-  const parseHex = (hex: string) => {
-    let cleaned = hex.replace('#', '');
-    if (cleaned.length === 3) {
-      cleaned = cleaned.split('').map(c => c + c).join('');
-    }
-    const num = parseInt(cleaned, 16);
-    return {
-      r: (num >> 16) & 255,
-      g: (num >> 8) & 255,
-      b: num & 255,
-    };
-  };
-
-  try {
-    const rgb1 = parseHex(color1);
-    const rgb2 = parseHex(color2);
-    const r = Math.round(rgb1.r + (rgb2.r - rgb1.r) * ratio);
-    const g = Math.round(rgb1.g + (rgb2.g - rgb1.g) * ratio);
-    const b = Math.round(rgb1.b + (rgb2.b - rgb1.b) * ratio);
-    return `rgb(${r}, ${g}, ${b})`;
-  } catch (e) {
-    return color2;
-  }
-}
-
-const LetterRail: React.FC<LetterRailProps> = React.memo(({
-  activeIndex, activeIndexAnim, isSliding, isDragging, colorSource, top, height, side, pullX, showList, apps,
-}) => {
+const LetterRail = React.memo(React.forwardRef<LetterRailRef, LetterRailProps>(({
+  activeIndexAnim, isSliding, isDragging, top, height, side, pullX, showList, apps,
+}, ref) => {
   const { alphabet, hasAppSet } = useRailAlphabet(apps);
   const { settings } = useSettingsContext();
   const directionMultiplier = side === 'right' ? -1 : 1;
@@ -57,6 +34,18 @@ const LetterRail: React.FC<LetterRailProps> = React.memo(({
     enableMotionBlur, motionBlurIntensity,
     railFontFamily, railFontWeight, railFontSize
   } = settings;
+
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [colorSource, setColorSource] = React.useState<'rail' | 'list'>('list');
+
+  React.useImperativeHandle(ref, () => ({
+    setActiveIndex: (idx: number) => {
+      setActiveIndex(idx);
+    },
+    setColorSource: (source: 'rail' | 'list') => {
+      setColorSource(source);
+    },
+  }));
 
   // 预计算波浪因子表：每个字母距离为 dist 时的因子值
   const waveFactorTable = useMemo(() => {
@@ -113,6 +102,30 @@ const LetterRail: React.FC<LetterRailProps> = React.memo(({
     });
   }, [pullX, waveShapeCap]);
 
+  // 预解析颜色，避免在渲染循环中重复进行 Hex 字符串拆解计算
+  const parsedColors = useMemo(() => {
+    const parseHex = (hex: string) => {
+      let cleaned = hex.replace('#', '');
+      if (cleaned.length === 3) {
+        cleaned = cleaned.split('').map(c => c + c).join('');
+      }
+      const num = parseInt(cleaned, 16);
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255,
+      };
+    };
+    try {
+      return {
+        c1: parseHex(railColor),
+        c2: parseHex(railActiveColor),
+      };
+    } catch (e) {
+      return null;
+    }
+  }, [railColor, railActiveColor]);
+
   return (
     <View
       pointerEvents="none"
@@ -136,12 +149,20 @@ const LetterRail: React.FC<LetterRailProps> = React.memo(({
           const isListActive = colorSource === 'list';
           const colorEnabled = isRailActive ? enableRailColorChange : (isListActive ? enableListColorChange : false);
 
-          const ratio = (isDragging && waveIntensity > 0) ? Math.min(1, factor / waveIntensity) : 0;
-          const baseColor = interpolateHexColor(railColor, railActiveColor, ratio);
-
-          const color = colorEnabled && showList
-            ? (index === activeIndex ? themeColor : baseColor)
-            : (letter === '*' ? themeColor : railColor);
+          const color = (() => {
+            if (colorEnabled && showList) {
+              if (index === activeIndex) return themeColor;
+              if (parsedColors) {
+                const ratio = (isDragging && waveIntensity > 0) ? Math.min(1, factor / waveIntensity) : 0;
+                const r = Math.round(parsedColors.c1.r + (parsedColors.c2.r - parsedColors.c1.r) * ratio);
+                const g = Math.round(parsedColors.c1.g + (parsedColors.c2.g - parsedColors.c1.g) * ratio);
+                const b = Math.round(parsedColors.c1.b + (parsedColors.c2.b - parsedColors.c1.b) * ratio);
+                return `rgb(${r}, ${g}, ${b})`;
+              }
+              return railActiveColor;
+            }
+            return letter === '*' ? themeColor : railColor;
+          })();
 
           // Motion Blur & Scale calculations
           const blurFactor = dist === 0 ? 0 : Math.exp(-dist * dist * 0.15) * motionBlurIntensity;
@@ -204,7 +225,7 @@ const LetterRail: React.FC<LetterRailProps> = React.memo(({
       </View>
     </View>
   );
-});
+}));
 
 const styles = StyleSheet.create({
   rail: {

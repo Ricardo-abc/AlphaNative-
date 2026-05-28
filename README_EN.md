@@ -1,9 +1,9 @@
-# AlphaNative
+# Niga Launcher
 
 An alphabet navigation launcher app based on React Native (Expo), supporting quick scrolling and launching of installed applications.
 
 <!-- Screenshot placeholder -->
-<!-- ![AlphaNative Screenshot](assets/screenshot.png) -->
+<!-- ![Niga Launcher Screenshot](assets/screenshot.png) -->
 
 ## Features
 
@@ -69,7 +69,7 @@ npm run apk
 ## Project Structure
 
 ```
-AlphaNative/
+NigaLauncher/
 ├── App.tsx                      # Main app component (gesture handling, state management)
 ├── index.js                     # Entry file
 ├── app.json                     # Expo configuration

@@ -1,9 +1,9 @@
-# AlphaNative
+# Niga Launcher
 
 一个基于 React Native (Expo) 的字母导航启动器应用，支持快速滑动浏览和启动已安装的应用程序。
 
 <!-- 截图占位 - 后续补充 -->
-<!-- ![AlphaNative Screenshot](assets/screenshot.png) -->
+<!-- ![Niga Launcher Screenshot](assets/screenshot.png) -->
 
 ## 功能特性
 
@@ -69,7 +69,7 @@ npm run apk
 ## 项目结构
 
 ```
-AlphaNative/
+NigaLauncher/
 ├── App.tsx                      # 主应用组件（手势处理、状态管理）
 ├── index.js                     # 入口文件
 ├── app.json                     # Expo 配置

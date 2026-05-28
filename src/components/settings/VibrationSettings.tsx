@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -106,6 +106,17 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
   const lastVibratedIndex = useRef(-1);
   const selectedEffectRef = useRef(selectedEffect);
   const intensityRef = useRef(intensity);
+  const lastVibrateTime = useRef(0);
+  const vibrateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const activeIndexRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (vibrateTimeoutRef.current) {
+        clearTimeout(vibrateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // 轨道配置 - 与实际轨道一致
   const railHeight = 400;
@@ -194,7 +205,10 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
         setIsSliding(true);
-        lastVibratedIndex.current = -1;
+        if (vibrateTimeoutRef.current) {
+          clearTimeout(vibrateTimeoutRef.current);
+          vibrateTimeoutRef.current = null;
+        }
 
         const y = evt.nativeEvent.locationY;
         const relativeY = y - 80; // railTop
@@ -203,6 +217,7 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
         idx = Math.max(0, Math.min(idx, 28));
 
         setActiveIndex(idx);
+        activeIndexRef.current = idx;
 
         // 拉出动画
         Animated.timing(pullXAnim, {
@@ -212,6 +227,7 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
         }).start();
 
         triggerHaptic(selectedEffectRef.current, intensityRef.current);
+        lastVibrateTime.current = Date.now();
         lastVibratedIndex.current = idx;
       },
       onPanResponderMove: (evt) => {
@@ -223,12 +239,45 @@ const VibrationSettings: React.FC<VibrationSettingsProps> = ({ settings, onUpdat
 
         if (idx !== lastVibratedIndex.current) {
           setActiveIndex(idx);
-          lastVibratedIndex.current = idx;
-          triggerHaptic(selectedEffectRef.current, intensityRef.current);
+          activeIndexRef.current = idx;
+
+          if (vibrateTimeoutRef.current) {
+            clearTimeout(vibrateTimeoutRef.current);
+            vibrateTimeoutRef.current = null;
+          }
+
+          const now = Date.now();
+          const timeDiff = now - lastVibrateTime.current;
+          if (timeDiff >= 40) {
+            lastVibratedIndex.current = idx;
+            lastVibrateTime.current = now;
+            triggerHaptic(selectedEffectRef.current, intensityRef.current);
+          } else {
+            const delay = 40 - timeDiff;
+            vibrateTimeoutRef.current = setTimeout(() => {
+              if (idx !== lastVibratedIndex.current) {
+                lastVibratedIndex.current = idx;
+                lastVibrateTime.current = Date.now();
+                triggerHaptic(selectedEffectRef.current, intensityRef.current);
+              }
+            }, delay);
+          }
         }
       },
       onPanResponderRelease: () => {
         setIsSliding(false);
+
+        if (vibrateTimeoutRef.current) {
+          clearTimeout(vibrateTimeoutRef.current);
+          vibrateTimeoutRef.current = null;
+        }
+
+        if (activeIndexRef.current !== lastVibratedIndex.current) {
+          lastVibratedIndex.current = activeIndexRef.current;
+          lastVibrateTime.current = Date.now();
+          triggerHaptic(selectedEffectRef.current, intensityRef.current);
+        }
+
         // 收回动画
         Animated.timing(pullXAnim, {
           toValue: 0,
