@@ -1,5 +1,7 @@
 # Niga Launcher
 
+[中文](README.md) | [English](README_EN.md)
+
 一个基于 React Native (Expo) 的字母导航启动器应用，支持快速滑动浏览和启动已安装的应用程序。
 
 <!-- 截图占位 - 后续补充 -->

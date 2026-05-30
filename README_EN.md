@@ -1,5 +1,7 @@
 # Niga Launcher
 
+[中文](README.md) | [English](README_EN.md)
+
 An alphabet navigation launcher app based on React Native (Expo), supporting quick scrolling and launching of installed applications.
 
 <!-- Screenshot placeholder -->
